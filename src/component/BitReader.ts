@@ -46,7 +46,7 @@ export class BitReader {
     return result;
   }
 
-  resetOffset(bitOffset: number) {
+  seek(bitOffset: number) {
     this.bitOffset = bitOffset;
   }
 

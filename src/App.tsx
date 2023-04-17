@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css';
 import { Table, Tag, Input, Descriptions } from 'antd';
-import { IVF } from './component/VideoReader';
+import * as VideoReader from './component/VideoReader';
 import * as OBU from './component/OUB'
 
 export class App extends React.Component<any> {
@@ -47,36 +47,41 @@ export class App extends React.Component<any> {
   }
 
   randerPackage() {
+    let data = this.state.pkg[0];
+    if (data["@type"] == "IVF Header") {
+      return this.randerIVF();
+    } else if (data["@type"] == "ftyp") {
+      return this.renderMP4();
+    }
+  }
+
+  randerIVF() {
     let key = 0;
     let pkgIndex = 1;
     let frameIndex = 1;
-    let pkg: any = [];
+    let datas: any = [];
     console.info("pkg", this.state.pkg);
     for (let p of this.state.pkg) {
-      let type = "IVF Frame";
-      if (p.magic) {
-        type = "IVF Header";
-      }
-      pkg.push({
+      datas.push({
         key: key++,
-        type,
+        type: p['@type'],
         package: pkgIndex,
         length: p['@length'],
         offset: p['@offset'].toString(16).padStart(8, '0'),
-        ivf: p
+        values: p
       });
 
       for (let k of Object.keys(p)) {
         if (k.indexOf("@") == 0) continue;
         if (k != "obu") continue;
         for (let obu of p[k]) {
-          pkg.push({
+          datas.push({
             key: key++,
             type: this.obu_type.get(obu.obu_type),
             length: obu['@length'],
             offset: (p['@offset'] + obu['@offset'] + 12).toString(16).padStart(8, '0'),
-            obu: obu,
-            frame: obu['frame_type'] == undefined ? undefined : frameIndex++
+            frame: obu['frame_type'] == undefined ? undefined : frameIndex++,
+            values: obu
           });
         }
       }
@@ -84,11 +89,11 @@ export class App extends React.Component<any> {
     }
 
     return (
-      <Table dataSource={pkg} size={"small"} pagination={false}
+      <Table dataSource={datas} size={"small"} pagination={false}
         expandable={{
           expandedRowRender: (record) => {
             if (!record["@expanded"]) return;
-            let values = record.ivf || record.obu;
+            let values = record.values;
             return (
               <Descriptions column={1} size="small">
                 {
@@ -96,7 +101,62 @@ export class App extends React.Component<any> {
                     if (key.indexOf("#") == 0) return;
                     if (key.indexOf("@") == 0) return;
                     if (key[0] >= "A" && key[0] <= "Z") return;
-                    if (key == "obu") return;
+                    if (typeof values[key] == "object") return;
+                    return <Descriptions.Item key={index} label={key} >{values[key]}</Descriptions.Item>;
+                  })
+                }
+              </Descriptions>
+            );
+          },
+          onExpand: (expanded, record) => {
+            record['@expanded'] = expanded;
+          },
+          rowExpandable: (record) => true,
+          expandRowByClick: true,
+        }}>
+        <Table.Column title="包" dataIndex="package" key="package" />
+        <Table.Column title="帧" dataIndex="frame" key="frame" />
+        <Table.Column title="偏移" dataIndex="offset" key="offset" />
+        <Table.Column title="长度" dataIndex="length" key="length" />
+        <Table.Column title="类型" dataIndex="type" key="type" />
+      </Table>);
+  }
+
+  renderMP4() {
+    let key = 0;
+    let pkgIndex = 1;
+    let frameIndex = 1;
+    let datas: any = [];
+    console.info("pkg", this.state.pkg);
+
+    let show = function (pkg: any) {
+      for (let p of pkg) {
+        datas.push({
+          key: key++,
+          type: p['@type'],
+          package: pkgIndex,
+          length: p['@length'],
+          offset: p['@offset'].toString(16).padStart(8, '0'),
+          values: p
+        });
+        if (p.box) show(p.box);
+      }
+    }
+    show(this.state.pkg);
+    return (
+      <Table dataSource={datas} size={"small"} pagination={false}
+        expandable={{
+          expandedRowRender: (record) => {
+            if (!record["@expanded"]) return;
+            let values = record.values;
+            return (
+              <Descriptions column={1} size="small">
+                {
+                  Object.keys(values).map((key: string, index: number, array: string[]) => {
+                    if (key.indexOf("#") == 0) return;
+                    if (key.indexOf("@") == 0) return;
+                    if (key[0] >= "A" && key[0] <= "Z") return;
+                    if (typeof values[key] == "object") return;
                     return <Descriptions.Item key={index} label={key} >{values[key]}</Descriptions.Item>;
                   })
                 }
@@ -130,8 +190,7 @@ export class App extends React.Component<any> {
       let data = ev.target.result;
 
       let buf = new Uint8Array(data as ArrayBuffer);
-      let ivf = new IVF();
-      let pkg = ivf.parse(buf);
+      let pkg = VideoReader.parser(buf);
       this_.setState({ pkg });
     }
     this.file.readAsArrayBuffer(filename);

@@ -325,7 +325,7 @@ export class OBU {
       h['@length'] = (bitPos - bitOffset) / 8 + h.obu_size;
       obu.push(h);
       this.update_frame_buffers({ h });
-      b.resetOffset(bitPos + h.obu_size * 8);
+      b.seek(bitPos + h.obu_size * 8);
     }
     return obu;
   }
