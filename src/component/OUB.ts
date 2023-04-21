@@ -308,7 +308,7 @@ export class OBU {
     this.RefFrameType = new Array(NUM_REF_FRAMES);
   }
 
-  parse(buffer: Uint8Array) {
+  parse(buffer: Uint8Array, offset: number) {
     let obu: any[] = [];
     let b = new BitReader(buffer);
     while (buffer.length > b.get_position() / 8) {
@@ -321,7 +321,7 @@ export class OBU {
         this.seq_header = h;
       }
 
-      h['@offset'] = bitOffset / 8;
+      h['@offset'] = bitOffset / 8 + offset;
       h['@length'] = (bitPos - bitOffset) / 8 + h.obu_size;
       obu.push(h);
       this.update_frame_buffers({ h });

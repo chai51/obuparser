@@ -56,37 +56,28 @@ export class App extends React.Component<any> {
   }
 
   randerIVF() {
+    let this_ = this;
     let key = 0;
     let pkgIndex = 1;
     let frameIndex = 1;
     let datas: any = [];
     console.info("pkg", this.state.pkg);
-    for (let p of this.state.pkg) {
-      datas.push({
-        key: key++,
-        type: p['@type'],
-        package: pkgIndex,
-        length: p['@length'],
-        offset: p['@offset'].toString(16).padStart(8, '0'),
-        values: p
-      });
 
-      for (let k of Object.keys(p)) {
-        if (k.indexOf("@") == 0) continue;
-        if (k != "obu") continue;
-        for (let obu of p[k]) {
-          datas.push({
-            key: key++,
-            type: this.obu_type.get(obu.obu_type),
-            length: obu['@length'],
-            offset: (p['@offset'] + obu['@offset'] + 12).toString(16).padStart(8, '0'),
-            frame: obu['frame_type'] == undefined ? undefined : frameIndex++,
-            values: obu
-          });
-        }
+    let show = function (pkg: any, depth: number) {
+      for (let p of pkg) {
+        datas.push({
+          key: key++,
+          type: depth ? this_.obu_type.get(p.obu_type) : p['@type'],
+          package: depth ? undefined : pkgIndex++,
+          length: p['@length'],
+          offset: p['@offset'].toString(16).padStart(8, '0'),
+          frame: p['frame_type'] == undefined ? undefined : frameIndex++,
+          values: p
+        });
+        if (p.obu) show(p.obu, depth + 1);
       }
-      pkgIndex++;
     }
+    show(this.state.pkg, 0);
 
     return (
       <Table dataSource={datas} size={"small"} pagination={false}
@@ -129,20 +120,20 @@ export class App extends React.Component<any> {
     let datas: any = [];
     console.info("pkg", this.state.pkg);
 
-    let show = function (pkg: any) {
+    let show = function (pkg: any, depth: number) {
       for (let p of pkg) {
         datas.push({
           key: key++,
           type: p['@type'],
-          package: pkgIndex,
+          package: depth ? undefined : pkgIndex++,
           length: p['@length'],
           offset: p['@offset'].toString(16).padStart(8, '0'),
           values: p
         });
-        if (p.box) show(p.box);
+        if (p.box) show(p.box, depth + 1);
       }
     }
-    show(this.state.pkg);
+    show(this.state.pkg, 0);
     return (
       <Table dataSource={datas} size={"small"} pagination={false}
         expandable={{
