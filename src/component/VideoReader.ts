@@ -14,16 +14,20 @@ interface IVFHeader {
   reserved: number;
 };
 
-export function parser(buffer: Uint8Array) {
+export function parser(buffer: Uint8Array, name: string) {
   let b = new BitReader(buffer);
 
-  if (b.readString(4) == "DKIF") {
+  const ext = name.substring(name.lastIndexOf(".")).toLowerCase();
+  if (ext == ".ivf") {
     let ivf = new IVF();
     return ivf.parse(buffer);
+  } else if (ext == ".webm") {
+    let webm = new WEBM();
+    return webm.parse(buffer, 0);
+  } else if (ext == ".mp4") {
+    let mp4 = new MP4();
+    return mp4.parse(buffer, 0);
   }
-
-  let mp4 = new MP4();
-  return mp4.parse(buffer, 0);
 }
 
 export class IVF {
@@ -65,6 +69,125 @@ export class IVF {
       ivf.push(f);
     }
     return ivf;
+  }
+}
+
+export class WEBM {
+  constructor() {
+  }
+
+  headerParse(b: BitReader, h: any) {
+    // 找到EBML头的第一个字节
+    const kMaxScanBytes = 1024;
+    const kEbmlByte0 = 0x1a;
+    while (b.get_position() / 8 < kMaxScanBytes) {
+      let byte = b.u(8);
+      if (byte == kEbmlByte0) {
+        // h['@offset'] = (b.get_position() - 8) / 8;
+        // h['byte'] = byte;
+        break;
+      }
+    }
+    b.seek(0);
+
+    h['@offset'] = b.get_position() / 8;
+    h['id'] = this.ReadID(b);
+    h['@length'] = this.ReadUInt(b);
+    h['@type'] = "EMBL";
+    let endBitPos = h['@length'] * 8 + b.get_position();
+    h.header = [];
+    while (b.get_position() < endBitPos) {
+      let header: any = {};
+      this.ParseElementHeader(b, header);
+      h.header.push(header);
+    }
+  }
+
+  ReadID(b: BitReader) {
+    let temp_byte = b.u(8);
+    if (temp_byte == 0) {
+      throw Error("读取第一个字节失败");
+    }
+
+    let bit_pos = 0;
+    const kMaxIdLengthInBytes = 4;
+    const kCheckByte = 0x80;
+    let found_bit = false;
+    for (; bit_pos < kMaxIdLengthInBytes; ++bit_pos) {
+      if ((kCheckByte >> bit_pos) & temp_byte) {
+        found_bit = true;
+        break;
+      }
+    }
+    if (!found_bit) {
+      throw Error("The value is too large to be a valid ID");
+    }
+
+    const id_length = bit_pos + 1;
+    let ebml_id = temp_byte;
+    for (let i = 1; i < id_length; ++i) {
+      ebml_id <<= 8;
+      temp_byte = b.u(8);
+
+      ebml_id |= temp_byte;
+    }
+    return ebml_id;
+  }
+
+  ReadUInt(b: BitReader) {
+    let byte = b.u(8);
+    let len = 1;
+    let m = 0x80;
+    while (!(byte & m)) {
+      m >>= 1;
+      ++len;
+    }
+    let result = byte & (~m);
+    if (len != 1) {
+      let l = len - 1;
+      let v = b.u(l * 8);
+      result = (result << (l * 8)) | v;
+    }
+    return result;
+  }
+
+  ParseElementHeader(b: BitReader, h: any) {
+    h['@offset'] = b.get_position() / 8;
+    h['id'] = this.ReadID(b);
+    h['@length'] = this.ReadUInt(b);
+
+    let value: number | string;
+    if (h['id'] == 0x4282) {
+      value = b.readString(h['@length']);
+    } else {
+      value = b.u(h['@length'] * 8);
+    }
+  }
+
+  parse(buffer: Uint8Array, offset: number) {
+    let ebml: any[] = [];
+    let b = new BitReader(buffer);
+
+    let h: any = {};
+    this.headerParse(b, h);
+    ebml.push(h);
+
+    // Segment
+    let segment: any = {};
+    segment['@offset'] = b.get_position() / 8;
+    segment['id'] = this.ReadID(b);
+    segment['@length'] = this.ReadUInt(b);
+    segment.header = [];
+    if (segment['id'] == 0x18538067) {
+      let endBitPos = b.get_position() + segment['@length'] * 8;
+      while (b.get_position() < endBitPos) {
+        let header: any = {};
+        this.ParseElementHeader(b, header);
+        segment.header.push(header);
+      }
+    }
+    ebml.push(segment);
+    return ebml;
   }
 }
 
