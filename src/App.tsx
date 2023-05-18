@@ -13,7 +13,6 @@ export class App extends React.Component<any> {
 
   file?: FileReader;
   obu_type: Map<number, string>;
-  embl_type: Map<number, string>;
 
   constructor(prop: any) {
     super(prop);
@@ -28,24 +27,6 @@ export class App extends React.Component<any> {
     this.obu_type.set(OBU.OBU_REDUNDANT_FRAME_HEADER, "OBU_REDUNDANT_FRAME_HEADER");
     this.obu_type.set(OBU.OBU_TILE_LIST, "OBU_TILE_LIST");
     this.obu_type.set(OBU.OBU_PADDING, "OBU_PADDING");
-
-    this.embl_type = new Map();
-    this.embl_type.set(0x1A45DFA3, "EBML");
-    this.embl_type.set(0x4286, "EBMLVersion");
-    this.embl_type.set(0x42F7, "EBMLReadVersion");
-    this.embl_type.set(0x42F2, "EBMLMaxIDLength");
-    this.embl_type.set(0x42F3, "EBMLMaxSizeLength");
-    this.embl_type.set(0x4282, "DocType");
-    this.embl_type.set(0x4287, "DocTypeVersion");
-    this.embl_type.set(0x4285, "DocTypeReadVersion");
-    this.embl_type.set(0x18538067, "Segment");
-    this.embl_type.set(0x114D9B74, "SeekHead");
-    this.embl_type.set(0xEC, "Void");
-    this.embl_type.set(0x1549A966, "Info");
-    this.embl_type.set(0x1654AE6B, "Tracks");
-    this.embl_type.set(0x1254C367, "Tags");
-    this.embl_type.set(0x1F43B675, "Cluster");
-    this.embl_type.set(0x1C53BB6B, "Cues");
   }
 
   render(): React.ReactNode {
@@ -71,7 +52,7 @@ export class App extends React.Component<any> {
       return this.randerIVF();
     } else if (data["@type"] == "ftyp") {
       return this.renderMP4();
-    } else if (data.id == 0x1A45DFA3) {
+    } else if (data.tag == "EBML") {
       return this.renderWebm();
     }
   }
@@ -87,6 +68,7 @@ export class App extends React.Component<any> {
     let show = function (pkg: any, depth: number) {
       for (let p of pkg) {
         datas.push({
+          depth: new Array(depth).fill('I'),
           key: key++,
           type: depth ? this_.obu_type.get(p.obu_type) : p['@type'],
           package: depth ? undefined : pkgIndex++,
@@ -126,6 +108,7 @@ export class App extends React.Component<any> {
           rowExpandable: (record) => true,
           expandRowByClick: true,
         }}>
+        <Table.Column title="层级" dataIndex="depth" key="depth" />
         <Table.Column title="包" dataIndex="package" key="package" />
         <Table.Column title="帧" dataIndex="frame" key="frame" />
         <Table.Column title="偏移" dataIndex="offset" key="offset" />
@@ -144,6 +127,7 @@ export class App extends React.Component<any> {
     let show = function (pkg: any, depth: number) {
       for (let p of pkg) {
         datas.push({
+          depth: new Array(depth).fill('I'),
           key: key++,
           type: p['@type'],
           package: depth ? undefined : pkgIndex++,
@@ -181,6 +165,7 @@ export class App extends React.Component<any> {
           rowExpandable: (record) => true,
           expandRowByClick: true,
         }}>
+        <Table.Column title="层级" dataIndex="depth" key="depth" />
         <Table.Column title="包" dataIndex="package" key="package" />
         <Table.Column title="帧" dataIndex="frame" key="frame" />
         <Table.Column title="偏移" dataIndex="offset" key="offset" />
@@ -197,24 +182,51 @@ export class App extends React.Component<any> {
     let show = function (pkg: any, depth: number) {
       for (let p of pkg) {
         datas.push({
+          depth: new Array(depth).fill('I'),
           key: key++,
-          type: this_.embl_type.get(p.id) ? this_.embl_type.get(p.id) : p.id,
+          type: p.tag,
           length: p['@length'],
           offset: p['@offset'].toString(16).padStart(8, '0'),
           values: p
         });
         if (p.header) show(p.header, depth + 1);
+        if (p.body) show(p.body, depth + 1);
       }
     }
     show(this.state.pkg, 0);
 
-    return (<Table dataSource={datas} size={"small"} pagination={false}>
+    return (<Table dataSource={datas} size={"small"} pagination={false}
+      expandable={{
+        expandedRowRender: (record) => {
+          if (!record["@expanded"]) return;
+          let values = record.values;
+          return (
+            <Descriptions column={1} size="small">
+              {
+                Object.keys(values).map((key: string, index: number, array: string[]) => {
+                  if (key.indexOf("#") == 0) return;
+                  if (key.indexOf("@") == 0) return;
+                  if (key[0] >= "A" && key[0] <= "Z") return;
+                  if (typeof values[key] == "object") return;
+                  return <Descriptions.Item key={index} label={key} >{values[key]}</Descriptions.Item>;
+                })
+              }
+            </Descriptions>
+          );
+        },
+        onExpand: (expanded, record) => {
+          record['@expanded'] = expanded;
+        },
+        rowExpandable: (record) => true,
+        expandRowByClick: true,
+      }}>
+      <Table.Column title="层级" dataIndex="depth" key="depth" />
       <Table.Column title="包" dataIndex="package" key="package" />
       <Table.Column title="帧" dataIndex="frame" key="frame" />
       <Table.Column title="偏移" dataIndex="offset" key="offset" />
       <Table.Column title="长度" dataIndex="length" key="length" />
       <Table.Column title="类型" dataIndex="type" key="type" />
-    </Table>);
+    </ Table>);
   }
 
   onOpen(e: React.ChangeEvent<HTMLInputElement>) {

@@ -73,7 +73,68 @@ export class IVF {
 }
 
 export class WEBM {
+  tag_type: Map<number, string>;
+  audioTrack?: number;
+  videoTrack?: number;
+  obu: OBU;
+
   constructor() {
+    this.tag_type = new Map();
+    this.tag_type.set(0x1A45DFA3, "EBML");
+    this.tag_type.set(0x4286, "EBMLVersion");
+    this.tag_type.set(0x42F7, "EBMLReadVersion");
+    this.tag_type.set(0x42F2, "EBMLMaxIDLength");
+    this.tag_type.set(0x42F3, "EBMLMaxSizeLength");
+    this.tag_type.set(0x4282, "DocType");
+    this.tag_type.set(0x4287, "DocTypeVersion");
+    this.tag_type.set(0x4285, "DocTypeReadVersion");
+    this.tag_type.set(0x18538067, "Segment");
+    this.tag_type.set(0x114D9B74, "SeekHead");
+    this.tag_type.set(0x4DBB, "Seek");
+    this.tag_type.set(0xEC, "Void");
+
+    // Segment Information
+    this.tag_type.set(0x1549A966, "Info");
+    this.tag_type.set(0x2AD7B1, "TimecodeScale");
+    this.tag_type.set(0x4489, "Duration");
+    this.tag_type.set(0x4461, "DateUTC");
+    this.tag_type.set(0x7BA9, "Title");
+    this.tag_type.set(0x4D80, "MuxingApp");
+    this.tag_type.set(0x5741, "WritingApp");
+
+    // Track
+    this.tag_type.set(0x1654AE6B, "Tracks");
+    this.tag_type.set(0xAE, "TrackEntry");
+    this.tag_type.set(0xD7, "TrackNumber");
+    this.tag_type.set(0x73C5, "TrackUID");
+    this.tag_type.set(0x83, "TrackType");
+    this.tag_type.set(0xB9, "FlagEnabled");
+    this.tag_type.set(0x88, "FlagDefault");
+    this.tag_type.set(0x55AA, "FlagForced");
+    this.tag_type.set(0x9C, "FlagLacing");
+    this.tag_type.set(0x23E383, "DefaultDuration");
+    this.tag_type.set(0x55EE, "MaxBlockAdditionID");
+    this.tag_type.set(0x536E, "Name");
+    this.tag_type.set(0x22B59C, "Language");
+    this.tag_type.set(0x86, "CodecID");
+    this.tag_type.set(0x63A2, "CodecPrivate");
+    this.tag_type.set(0x258688, "CodecName");
+    this.tag_type.set(0x56AA, "CodecDelay");
+    this.tag_type.set(0x56BB, "SeekPreRoll");
+    this.tag_type.set(0xE0, "Video");
+    this.tag_type.set(0xE1, "Audio");
+
+    this.tag_type.set(0x1254C367, "Tags");
+
+    // Cluster
+    this.tag_type.set(0x1F43B675, "Cluster");
+    this.tag_type.set(0xA0, "BlockGroup");
+    this.tag_type.set(0xA3, "SimpleBlock");
+    this.tag_type.set(0xE7, "Timecode");
+
+    this.tag_type.set(0x1C53BB6B, "Cues");
+
+    this.obu = new OBU();
   }
 
   headerParse(b: BitReader, h: any) {
@@ -83,23 +144,163 @@ export class WEBM {
     while (b.get_position() / 8 < kMaxScanBytes) {
       let byte = b.u(8);
       if (byte == kEbmlByte0) {
-        // h['@offset'] = (b.get_position() - 8) / 8;
-        // h['byte'] = byte;
         break;
       }
     }
-    b.seek(0);
+    b.seek(b.get_position() - 8);
 
-    h['@offset'] = b.get_position() / 8;
-    h['id'] = this.ReadID(b);
-    h['@length'] = this.ReadUInt(b);
-    h['@type'] = "EMBL";
-    let endBitPos = h['@length'] * 8 + b.get_position();
+    this.parseElementHeader(b, h);
     h.header = [];
-    while (b.get_position() < endBitPos) {
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
       let header: any = {};
-      this.ParseElementHeader(b, header);
+      this.parseElementHeader(b, header);
+      if (header.tag == "DocType") {
+        header.value = b.readString(header.length);
+      } else {
+        header.value = b.u(header.length * 8);
+      }
       h.header.push(header);
+    }
+  }
+
+  bodyParse(b: BitReader, h: any) {
+    this.parseElementHeader(b, h);
+    if (h.tag == "Segment") {
+      this.segmentParse(b, h);
+    } else {
+      b.readBuffer(h.length);
+    }
+  }
+
+  segmentParse(b: BitReader, h: any) {
+    h.body = [];
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
+      let body: any = {};
+      this.parseElementHeader(b, body);
+      if (body.tag == "SeekHead") {
+        this.SeekHeadParse(b, body);
+      } else if (body.tag == "Info") {
+        this.InfoParse(b, body);
+      } else if (body.tag == "Tracks") {
+        this.TracksParse(b, body);
+      } else if (body.tag == "Cluster") {
+        this.ClusterParse(b, body);
+      } else {
+        b.readBuffer(body.length);
+      }
+      h.body.push(body);
+    }
+  }
+
+  SeekHeadParse(b: BitReader, h: any) {
+    h.body = [];
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
+      let body: any = {};
+      this.parseElementHeader(b, body);
+      if (body.tag == "Seek") {
+        b.readBuffer(body.length);
+      } else {
+        b.readBuffer(body.length);
+      }
+      h.body.push(body);
+    }
+  }
+
+  InfoParse(b: BitReader, h: any) {
+    h.body = [];
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
+      let body: any = {};
+      this.parseElementHeader(b, body);
+      b.readBuffer(body.length);
+      h.body.push(body);
+    }
+  }
+
+  TracksParse(b: BitReader, h: any) {
+    h.body = [];
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
+      let body: any = {};
+      this.parseElementHeader(b, body);
+      if (body.tag == "TrackEntry") {
+        this.TrackEntryParse(b, body);
+      } else {
+        b.readBuffer(body.length);
+      }
+      h.body.push(body);
+    }
+  }
+
+  ClusterParse(b: BitReader, h: any) {
+    h.block = [];
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
+      let body: any = {};
+      this.parseElementHeader(b, body);
+      if (body.tag == "BlockGroup") {
+
+      } else if (body.tag == "SimpleBlock") {
+        this.SimpleBlockParse(b, body);
+      }
+      b.seek((body['@offset'] + body['@length']) * 8);
+      h.block.push(body);
+    }
+  }
+
+  SimpleBlockParse(b: BitReader, h: any) {
+    let startPos = b.get_position() / 8;
+    h.track = this.ReadUInt(b);
+    b.readBuffer(2);
+    let flags = b.u(8);
+    let lacing = (flags & 0x06) >> 1;
+    if (lacing == 0) {
+      h.pos = b.get_position() / 8;
+      h.len = h.length - (h.pos - startPos);
+    }
+
+    if (h.track == this.videoTrack) {
+      h.frame = this.obu.parse(b.readBuffer(h.len), h.pos);
+    }
+  }
+
+  TrackEntryParse(b: BitReader, h: any) {
+    h.body = [];
+    let track = -1;
+    let kind = "";
+    while (b.get_position() < (h['@offset'] + h['@length']) * 8) {
+      let body: any = {};
+      this.parseElementHeader(b, body);
+      if (body.tag == "TrackUID" ||
+        body.tag == "TrackType" ||
+        body.tag == "DefaultDuration" ||
+        body.tag == "FlagLacing" ||
+        body.tag == "CodecDelay" ||
+        body.tag == "SeekPreRoll") {
+        body.value = b.u(body.length * 8);
+      } else if (body.tag == "Name" ||
+        body.tag == "Language" ||
+        body.tag == "CodecID" ||
+        body.tag == "CodecName") {
+        body.value = b.readString(body.length);
+      } else if (body.tag == "TrackNumber") {
+        body.value = b.u(body.length * 8);
+        track = body.value;
+      } else if (body.tag == "Audio") {
+        kind = "audio";
+        b.readBuffer(body.length);
+      } else if (body.tag == "Video") {
+        kind = "video";
+        b.readBuffer(body.length);
+      } else {
+        b.readBuffer(body.length);
+      }
+      h.body.push(body);
+    }
+
+    if (track != -1) {
+      if (kind == "audio") {
+        this.audioTrack = track;
+      } else if (kind == "video") {
+        this.videoTrack = track;
+      }
     }
   }
 
@@ -123,9 +324,8 @@ export class WEBM {
       throw Error("The value is too large to be a valid ID");
     }
 
-    const id_length = bit_pos + 1;
     let ebml_id = temp_byte;
-    for (let i = 1; i < id_length; ++i) {
+    for (let i = 0; i < bit_pos; ++i) {
       ebml_id <<= 8;
       temp_byte = b.u(8);
 
@@ -151,17 +351,12 @@ export class WEBM {
     return result;
   }
 
-  ParseElementHeader(b: BitReader, h: any) {
+  parseElementHeader(b: BitReader, h: any) {
     h['@offset'] = b.get_position() / 8;
-    h['id'] = this.ReadID(b);
-    h['@length'] = this.ReadUInt(b);
-
-    let value: number | string;
-    if (h['id'] == 0x4282) {
-      value = b.readString(h['@length']);
-    } else {
-      value = b.u(h['@length'] * 8);
-    }
+    let tag = this.ReadID(b);
+    h.tag = this.tag_type.get(tag) ? this.tag_type.get(tag) : tag;
+    h.length = this.ReadUInt(b);
+    h['@length'] = b.get_position() / 8 - h['@offset'] + h.length;
   }
 
   parse(buffer: Uint8Array, offset: number) {
@@ -173,20 +368,9 @@ export class WEBM {
     ebml.push(h);
 
     // Segment
-    let segment: any = {};
-    segment['@offset'] = b.get_position() / 8;
-    segment['id'] = this.ReadID(b);
-    segment['@length'] = this.ReadUInt(b);
-    segment.header = [];
-    if (segment['id'] == 0x18538067) {
-      let endBitPos = b.get_position() + segment['@length'] * 8;
-      while (b.get_position() < endBitPos) {
-        let header: any = {};
-        this.ParseElementHeader(b, header);
-        segment.header.push(header);
-      }
-    }
-    ebml.push(segment);
+    let body: any = {};
+    this.bodyParse(b, body);
+    ebml.push(body);
     return ebml;
   }
 }
@@ -225,7 +409,7 @@ export class MP4 {
         b.seek(startBitPos + h.size * 8);
       }
     }
-    this.mdat(b, box);
+    // this.mdat(b, box);
 
     return box;
   }
