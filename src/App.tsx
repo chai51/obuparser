@@ -70,7 +70,7 @@ export class App extends React.Component<any> {
         datas.push({
           depth: new Array(depth).fill('I'),
           key: key++,
-          type: depth ? this_.obu_type.get(p.obu_type) : p['@type'],
+          type: p['@type'],
           package: depth ? undefined : pkgIndex++,
           length: p['@length'],
           offset: p['@offset'].toString(16).padStart(8, '0'),

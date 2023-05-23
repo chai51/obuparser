@@ -295,9 +295,6 @@ const BWDREF_FRAME = 5;
 const ALTREF2_FRAME = 6;
 const ALTREF_FRAME = 7;
 
-
-let h: any;
-
 export class OBU {
   seq_header: any;
   SeenFrameHeader: number;
@@ -340,20 +337,32 @@ export class OBU {
     }
     let startPosition = b.get_position();
 
-    if (h.obu_type == OBU_SEQUENCE_HEADER)
+    if (h.obu_type == OBU_SEQUENCE_HEADER) {
       this.sequence_header_obu({ b, h });
-    // else if (h.obu_type == OBU_TEMPORAL_DELIMITER)
-    //   this.temporal_delimiter_obu();
-    else if (h.obu_type == OBU_FRAME_HEADER)
+      h['@type'] = "OBU_SEQUENCE_HEADER";
+    } else if (h.obu_type == OBU_TEMPORAL_DELIMITER) {
+      h['@type'] = "OBU_TEMPORAL_DELIMITER";
+    } else if (h.obu_type == OBU_FRAME_HEADER) {
       this.frame_header_obu({ b, h });
-    else if (h.obu_type == OBU_REDUNDANT_FRAME_HEADER)
-      this.frame_header_obu({ b, h });
-    else if (h.obu_type == OBU_TILE_GROUP)
+      h['@type'] = "OBU_FRAME_HEADER";
+    } else if (h.obu_type == OBU_TILE_GROUP) {
       this.tile_group_obu(h.obu_size, { b, h });
-    // else if (h.obu_type == OBU_METADATA)
-    //   this.metadata_obu();
-    else if (h.obu_type == OBU_FRAME)
+      h['@type'] = "OBU_TILE_GROUP";
+    } else if (h.obu_type == OBU_METADATA) {
+      h['@type'] = "OBU_METADATA";
+    } else if (h.obu_type == OBU_FRAME) {
       this.frame_obu(h.obu_size, { b, h });
+      h['@type'] = "OBU_FRAME";
+    } else if (h.obu_type == OBU_REDUNDANT_FRAME_HEADER) {
+      this.frame_header_obu({ b, h });
+      h['@type'] = "OBU_REDUNDANT_FRAME_HEADER";
+    } else if (h.obu_type == OBU_TILE_LIST) {
+      h['@type'] = "OBU_TILE_LIST";
+    } else if (h.obu_type == OBU_PADDING) {
+      h['@type'] = "OBU_PADDING";
+    } else {
+      h['@type'] = "Reserved";
+    }
     // else if (h.obu_type == OBU_TILE_LIST)
     //   this.tile_list_obu();
     // else if (h.obu_type == OBU_PADDING)
@@ -375,6 +384,9 @@ export class OBU {
   // 5.3.2. OBU header syntax
   obu_header({ b, h }: { b: BitReader, h: any }) {
     h.obu_forbidden_bit = b.u(1);
+    if (h.obu_forbidden_bit) {
+      throw Error("obu_forbidden_bit Must not be set");
+    }
     h.obu_type = b.u(4);
     h.obu_extension_flag = b.u(1);
     h.obu_has_size_field = b.u(1);
