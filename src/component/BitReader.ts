@@ -23,6 +23,10 @@ export class BitReader {
     return byte;
   }
 
+  byteLength(): number {
+    return this.buffer.length;
+  }
+
   readString(length: number): string {
     let result = "";
     for (let i = 0; i < length; i++) {
@@ -50,7 +54,7 @@ export class BitReader {
     this.bitOffset = bitOffset;
   }
 
-  private FloorLog2(x: number) {
+  FloorLog2(x: number) {
     let s = 0;
     while (x != 0) {
       x = x >> 1;
@@ -119,24 +123,6 @@ export class BitReader {
     if (v < m)
       return v;
     let extra_bit = this.f(1);
-    return (v << 1) - m + extra_bit;
-  }
-
-  L(n: number): number {
-    return 0;
-  }
-
-  S(): number {
-    return 0;
-  }
-
-  NS(n: number) {
-    let w = this.FloorLog2(n) + 1;
-    let m = (1 << w) - n;
-    let v = this.L(w - 1);
-    if (v < m)
-      return v;
-    let extra_bit = this.L(1);
     return (v << 1) - m + extra_bit;
   }
 
