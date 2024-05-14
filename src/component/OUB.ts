@@ -5881,8 +5881,8 @@ export class OBU {
       }
       case "partition": {
         let bsl = Mi_Width_Log2[data.bsize];
-        let above = h.AvailU && (Mi_Width_Log2[h.MiSizes[data.r - 1][data.c]] < bsl);
-        let left = h.AvailL && (Mi_Height_Log2[h.MiSizes[data.r][data.c - 1]] < bsl);
+        let above = h.AvailU && (Mi_Width_Log2[h[`MiSizes[${data.r - 1}][${data.c}]`]] < bsl);
+        let left = h.AvailL && (Mi_Height_Log2[h[`MiSizes[${data.r}][${data.c - 1}]`]] < bsl);
         let ctx = left * 2 + above;
         switch (bsl) {
           case 1:
@@ -5899,8 +5899,8 @@ export class OBU {
       }
       case "split_or_horz": {
         let bsl = Mi_Width_Log2[data.bsize];
-        let above = h.AvailU && (Mi_Width_Log2[h.MiSizes[data.r - 1][data.c]] < bsl);
-        let left = h.AvailL && (Mi_Height_Log2[h.MiSizes[data.r][data.c - 1]] < bsl);
+        let above = h.AvailU && (Mi_Width_Log2[h[`MiSizes[${data.r - 1}][${data.c}]`]] < bsl);
+        let left = h.AvailL && (Mi_Height_Log2[h[`MiSizes[${data.r}][${data.c - 1}]`]] < bsl);
         let ctx = left * 2 + above;
         let partitionCdf: number[];
         switch (bsl) {
@@ -5926,13 +5926,14 @@ export class OBU {
           partitionCdf[PARTITION_VERT_B] - partitionCdf[PARTITION_VERT_B - 1]);
         if (data.bsize != BLOCK_128X128)
           psum += partitionCdf[PARTITION_VERT_4] - partitionCdf[PARTITION_VERT_4 - 1];
-        let cdf = [(1 << 15) - psum, 1 << 15, 0];
+        // libaom与av1文档不一致
+        let cdf = [- psum, 0, 0];
         return this.S2({ b, h }, cdf);
       }
       case "split_or_vert": {
         let bsl = Mi_Width_Log2[data.bsize];
-        let above = h.AvailU && (Mi_Width_Log2[h.MiSizes[data.r - 1][data.c]] < bsl);
-        let left = h.AvailL && (Mi_Height_Log2[h.MiSizes[data.r][data.c - 1]] < bsl);
+        let above = h.AvailU && (Mi_Width_Log2[h[`MiSizes[${data.r - 1}][${data.c}]`]] < bsl);
+        let left = h.AvailL && (Mi_Height_Log2[h[`MiSizes[${data.r}][${data.c - 1}]`]] < bsl);
         let ctx = left * 2 + above;
         let partitionCdf: number[];
         switch (bsl) {
@@ -5958,7 +5959,8 @@ export class OBU {
           partitionCdf[PARTITION_VERT_A] - partitionCdf[PARTITION_VERT_A - 1]);
         if (data.bsize != BLOCK_128X128)
           psum += partitionCdf[PARTITION_HORZ_4] - partitionCdf[PARTITION_HORZ_4 - 1];
-        let cdf = [(1 << 15) - psum, 1 << 15, 0];
+        // libaom与av1文档不一致
+        let cdf = [-psum, 0, 0];
         return this.S2({ b, h }, cdf);
       }
       case "tx_depth": {
@@ -6257,32 +6259,38 @@ export class OBU {
         let maxX4 = h.MiCols;
         let maxY4 = h.MiRows;
 
-        if (h.plane > 0) {
-          maxX4 = maxX4 >> h.subsampling_x;
-          maxY4 = maxY4 >> h.subsampling_y;
+        if (data.plane > 0) {
+          maxX4 = maxX4 >> this.seq_header.subsampling_x;
+          maxY4 = maxY4 >> this.seq_header.subsampling_y;
         }
 
-        let width = Tx_Width[h.txSz];
-        let height = Tx_Height[h.txSz];
+        let width = Tx_Width[data.txSz];
+        let height = Tx_Height[data.txSz];
 
-        let bsize = this.get_plane_residual_size({ b, h }, h.MiSize, h.plane);
+        let bsize = this.get_plane_residual_size({ b, h }, h.MiSize, data.plane);
         let bw = Block_Width[bsize];
         let bh = Block_Height[bsize];
         let ctx = 0;
 
-        if (h.plane == 0) {
+        if (data.plane == 0) {
           let top = 0;
           let left = 0;
 
-          for (let k = 0; k < h.w4; k++) {
-            if (h.x4 + k < maxX4) {
-              top = Math.max(top, h[`AboveLevelContext[${h.plane}][${h.x4 + k}]`]);
+          for (let k = 0; k < data.w4; k++) {
+            if (data.x4 + k < maxX4) {
+              top = Math.max(top, h[`AboveLevelContext[${data.plane}][${data.x4 + k}]`]);
+              if (top == undefined) {
+                console.error("top is undefined, from AboveLevelContext");
+              }
             }
           }
 
-          for (let k = 0; k < h.h4; k++) {
-            if (h.y4 + k < maxY4) {
-              left = Math.max(left, h[`LeftLevelContext[${h.plane}][${h.y4 + k}]`]);
+          for (let k = 0; k < data.h4; k++) {
+            if (data.y4 + k < maxY4) {
+              left = Math.max(left, h[`LeftLevelContext[${data.plane}][${data.y4 + k}]`]);
+              if (left == undefined) {
+                console.error("left is undefined, from LeftLevelContext");
+              }
             }
           }
 
@@ -6306,17 +6314,29 @@ export class OBU {
           let above = 0;
           let left = 0;
 
-          for (let i = 0; i < h.w4; i++) {
-            if (h.x4 + i < maxX4) {
-              above |= h[`AboveLevelContext[${h.plane}][${h.x4 + i}]`];
-              above |= h[`AboveDcContext[${h.plane}][${h.x4 + i}]`];
+          for (let i = 0; i < data.w4; i++) {
+            if (data.x4 + i < maxX4) {
+              if (h[`AboveLevelContext[${data.plane}][${data.x4 + i}]`] == undefined) {
+                console.error("above is undefined, from AboveLevelContext");
+              }
+              if (h[`AboveDcContext[${data.plane}][${data.x4 + i}]`] == undefined) {
+                console.error("above is undefined, from AboveDcContext");
+              }
+              above |= h[`AboveLevelContext[${data.plane}][${data.x4 + i}]`];
+              above |= h[`AboveDcContext[${data.plane}][${data.x4 + i}]`];
             }
           }
 
-          for (let i = 0; i < h.h4; i++) {
-            if (h.y4 + i < maxY4) {
-              left |= h[`LeftLevelContext[${h.plane}][${h.y4 + i}]`];
-              left |= h[`LeftDcContext[${h.plane}][${h.y4 + i}]`];
+          for (let i = 0; i < data.h4; i++) {
+            if (data.y4 + i < maxY4) {
+              if (h[`LeftLevelContext[${data.plane}][${data.y4 + i}]`] == undefined) {
+                console.error("left is undefined, from LeftLevelContext");
+              }
+              if (h[`LeftDcContext[${data.plane}][${data.y4 + i}]`] == undefined) {
+                console.error("left is undefined, from LeftDcContext");
+              }
+              left |= h[`LeftLevelContext[${data.plane}][${data.y4 + i}]`];
+              left |= h[`LeftDcContext[${data.plane}][${data.y4 + i}]`];
             }
           }
 
@@ -6327,65 +6347,68 @@ export class OBU {
             ctx += 3;
           }
         }
-        return this.S2({ b, h }, this.TxbSkipCdf[h.txSzCtx][ctx]);
+        return this.S2({ b, h }, this.TxbSkipCdf[data.txSzCtx][ctx]);
         // return this.S2({ b, h }, this.TileTxbSkipCdf[txSzCtx][ctx]);
       }
       case "eob_pt_16": {
-        let txType = this.compute_tx_type({ b, h }, h.plane, h.txSz, h.x4, h.y4);
+        let txType = this.compute_tx_type({ b, h }, data.plane, data.txSz, data.x4, data.y4);
         let ctx = (get_tx_class(txType) == TX_CLASS_2D) ? 0 : 1;
-        return this.S2({ b, h }, this.EobPt16Cdf[h.ptype][ctx]);
+        return this.S2({ b, h }, this.EobPt16Cdf[data.ptype][ctx]);
       }
       case "eob_pt_32": {
-        let txType = this.compute_tx_type({ b, h }, h.plane, h.txSz, h.x4, h.y4);
+        let txType = this.compute_tx_type({ b, h }, data.plane, data.txSz, data.x4, data.y4);
         let ctx = (get_tx_class(txType) == TX_CLASS_2D) ? 0 : 1;
-        return this.S2({ b, h }, this.EobPt32Cdf[h.ptype][ctx]);
+        return this.S2({ b, h }, this.EobPt32Cdf[data.ptype][ctx]);
       }
       case "eob_pt_64": {
-        let txType = this.compute_tx_type({ b, h }, h.plane, h.txSz, h.x4, h.y4);
+        let txType = this.compute_tx_type({ b, h }, data.plane, data.txSz, data.x4, data.y4);
         let ctx = (get_tx_class(txType) == TX_CLASS_2D) ? 0 : 1;
-        return this.S2({ b, h }, this.EobPt64Cdf[h.ptype][ctx]);
+        return this.S2({ b, h }, this.EobPt64Cdf[data.ptype][ctx]);
       }
       case "eob_pt_128": {
-        let txType = this.compute_tx_type({ b, h }, h.plane, h.txSz, h.x4, h.y4);
+        let txType = this.compute_tx_type({ b, h }, data.plane, data.txSz, data.x4, data.y4);
         let ctx = (get_tx_class(txType) == TX_CLASS_2D) ? 0 : 1;
-        return this.S2({ b, h }, this.EobPt128Cdf[h.ptype][ctx]);
+        return this.S2({ b, h }, this.EobPt128Cdf[data.ptype][ctx]);
       }
       case "eob_pt_256": {
-        let txType = this.compute_tx_type({ b, h }, h.plane, h.txSz, h.x4, h.y4);
+        let txType = this.compute_tx_type({ b, h }, data.plane, data.txSz, data.x4, data.y4);
         let ctx = (get_tx_class(txType) == TX_CLASS_2D) ? 0 : 1;
-        return this.S2({ b, h }, this.EobPt256Cdf[h.ptype][ctx]);
+        return this.S2({ b, h }, this.EobPt256Cdf[data.ptype][ctx]);
       }
       case "eob_pt_512": {
-        return this.S2({ b, h }, this.EobPt512Cdf[h.ptype]);
+        return this.S2({ b, h }, this.EobPt512Cdf[data.ptype]);
       }
       case "eob_pt_1024": {
-        return this.S2({ b, h }, this.EobPt1024Cdf[h.ptype]);
+        return this.S2({ b, h }, this.EobPt1024Cdf[data.ptype]);
       }
       case "eob_extra": {
-        return this.S2({ b, h }, this.EobExtraCdf[h.txSzCtx][h.ptype][h.eobPt - 3]);
+        return this.S2({ b, h }, this.EobExtraCdf[data.txSzCtx][data.ptype][data.eobPt - 3]);
       }
       case "coeff_base": {
-        let ctx = get_coeff_base_ctx(h.txSz, h.plane, h.x4, h.y4, h[`scan[${h.c}]`], h.c, 0);
-        return this.S2({ b, h }, this.CoeffBaseCdf[h.txSzCtx][h.ptype][ctx]);
+        let ctx = get_coeff_base_ctx(data.txSz, data.plane, data.x4, data.y4, data.scan[data.c], data.c, 0);
+        return this.S2({ b, h }, this.CoeffBaseCdf[data.txSzCtx][data.ptype][ctx]);
       }
       case "coeff_base_eob": {
-        let ctx = get_coeff_base_ctx(h.txSz, h.plane, h.x4, h.y4, h[`scan[${h.c}]`], h.c, 1) - SIG_COEF_CONTEXTS + SIG_COEF_CONTEXTS_EOB;
-        return this.S2({ b, h }, this.CoeffBaseEobCdf[h.txSzCtx][h.ptype][ctx]);
+        let ctx = get_coeff_base_ctx(data.txSz, data.plane, data.x4, data.y4, data.scan[data.c], data.c, 1) - SIG_COEF_CONTEXTS + SIG_COEF_CONTEXTS_EOB;
+        return this.S2({ b, h }, this.CoeffBaseEobCdf[data.txSzCtx][data.ptype][ctx]);
       }
       case "dc_sign": {
         let maxX4 = h.MiCols;
         let maxY4 = h.MiRows;
 
-        if (h.plane > 0) {
-          maxX4 = maxX4 >> h.subsampling_x;
-          maxY4 = maxY4 >> h.subsampling_y;
+        if (data.plane > 0) {
+          maxX4 = maxX4 >> this.seq_header.subsampling_x;
+          maxY4 = maxY4 >> this.seq_header.subsampling_y;
         }
 
         let dcSign = 0;
 
-        for (let k = 0; k < h.w4; k++) {
-          if (h.x4 + k < maxX4) {
-            let sign = h[`AboveDcContext[${h.plane}][${h.x4 + k}]`];
+        for (let k = 0; k < data.w4; k++) {
+          if (data.x4 + k < maxX4) {
+            let sign = h[`AboveDcContext[${data.plane}][${data.x4 + k}]`];
+            if (sign == undefined) {
+              console.error("sign is undefined, from AboveDcContext");
+            }
             if (sign == 1) {
               dcSign--;
             } else if (sign == 2) {
@@ -6394,9 +6417,12 @@ export class OBU {
           }
         }
 
-        for (let k = 0; k < h.h4; k++) {
-          if (h.y4 + k < maxY4) {
-            let sign = h[`LeftDcContext[${h.plane}][${h.y4 + k}]`];
+        for (let k = 0; k < data.h4; k++) {
+          if (data.y4 + k < maxY4) {
+            let sign = h[`LeftDcContext[${data.plane}][${data.y4 + k}]`];
+            if (sign == undefined) {
+              console.error("sign is undefined, from LeftDcContext");
+            }
             if (sign == 1) {
               dcSign--;
             } else if (sign == 2) {
@@ -6411,7 +6437,7 @@ export class OBU {
         } else if (dcSign > 0) {
           ctx = 2;
         }
-        return this.S2({ b, h }, this.DcSignCdf[h.ptype][ctx]);
+        return this.S2({ b, h }, this.DcSignCdf[data.ptype][ctx]);
       }
       case "coeff_br": {
         const Mag_Ref_Offset_With_Tx_Class = [
@@ -6419,15 +6445,15 @@ export class OBU {
           [[0, 1], [1, 0], [0, 2]],
           [[0, 1], [1, 0], [2, 0]]
         ];
-        let adjTxSz = Adjusted_Tx_Size[h.txSz];
+        let adjTxSz = Adjusted_Tx_Size[data.txSz];
         let bwl = Tx_Width_Log2[adjTxSz];
         let txw = Tx_Width[adjTxSz];
         let txh = Tx_Height[adjTxSz];
-        let row = h.pos >> bwl;
-        let col = h.pos - (row << bwl);
+        let row = data.pos >> bwl;
+        let col = data.pos - (row << bwl);
         let mag = 0;
 
-        let txType = this.compute_tx_type({ b, h }, h.plane, h.txSz, h.x4, h.y4);
+        let txType = this.compute_tx_type({ b, h }, data.plane, data.txSz, data.x4, data.y4);
         let txClass = get_tx_class(txType);
 
         for (let idx = 0; idx < 3; idx++) {
@@ -6446,7 +6472,7 @@ export class OBU {
         mag = Math.min((mag + 1) >> 1, 6);
 
         let ctx = 0;
-        if (h.pos == 0) {
+        if (data.pos == 0) {
           ctx = mag;
         } else if (txClass == 0) {
           if (row < 2 && col < 2) {
@@ -6469,7 +6495,7 @@ export class OBU {
             }
           }
         }
-        return this.S2({ b, h }, this.CoeffBrCdf[Math.min(h.txSzCtx, TX_32X32)][h.ptype][ctx]);
+        return this.S2({ b, h }, this.CoeffBrCdf[Math.min(data.txSzCtx, TX_32X32)][data.ptype][ctx]);
       }
       case "has_palette_y": {
         let ctx = 0;
@@ -6554,10 +6580,10 @@ export class OBU {
         }
 
         let cdf: number[] = [];
-        if (h.set === TX_SET_INTRA_1) {
-          cdf = this.TileIntraTxTypeSet1Cdf[Tx_Size_Sqr[h.txSz]][intraDir];
-        } else if (h.set === TX_SET_INTRA_2) {
-          cdf = this.TileIntraTxTypeSet2Cdf[Tx_Size_Sqr[h.txSz]][intraDir];
+        if (data.set === TX_SET_INTRA_1) {
+          cdf = this.TileIntraTxTypeSet1Cdf[Tx_Size_Sqr[data.txSz]][intraDir];
+        } else if (data.set === TX_SET_INTRA_2) {
+          cdf = this.TileIntraTxTypeSet2Cdf[Tx_Size_Sqr[data.txSz]][intraDir];
         }
         return this.S2({ b, h }, cdf);
       }
@@ -6717,11 +6743,11 @@ export class OBU {
         return this.S2({ b, h }, this.TileCflSignCdf);
       }
       case "cfl_alpha_u": {
-        let ctx = (h.signU - 1) * 3 + h.signV;
+        let ctx = (data.signU - 1) * 3 + data.signV;
         return this.S2({ b, h }, this.TileCflAlphaCdf[ctx]);
       }
       case "cfl_alpha_v": {
-        let ctx = (h.signV - 1) * 3 + h.signU;
+        let ctx = (data.signV - 1) * 3 + data.signU;
         return this.S2({ b, h }, this.TileCflAlphaCdf[ctx]);
       }
       case "use_wiener": {
@@ -6736,31 +6762,57 @@ export class OBU {
     }
   }
 
+  aom_read_bit({ b, h }: { b: BitReader, h: any }) {
+    const prob = 128;
+    const f = (0x7FFFFF - (prob << 15) + prob) >>> 8;
+
+    let dif = h.SymbolValue;
+    let r = h.SymbolRange;
+    let v = ((r >>> 8) * (f >>> EC_PROB_SHIFT) >>> (7 - EC_PROB_SHIFT));
+    v += EC_MIN_PROB;
+    let vw = v << (32 - 16);
+    let ret = 1;
+    let r_new = v;
+    if (dif >= vw) {
+      r_new = r - v;
+      dif -= vw;
+      ret = 0;
+    }
+    h.SymbolValue = dif;
+    h.SymbolRange = r_new;
+    this.renormalized_symbol({ b, h });
+    return ret;
+  }
+
   L({ b, h }: { b: BitReader, h: any }, n: number): number {
     let literal = 0;
     for (let bit = n - 1; bit >= 0; bit--) {
-      const prob = 128;
-      const f = (0x7FFFFF - (prob << 15) + prob) >> 8;
-
-      let dif = h.SymbolValue;
-      let r = h.SymbolRange;
-      let v = ((r >> 8) * (f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT));
-      v += EC_MIN_PROB;
-      let vw = v << (32 - 16);
-      let ret = 1;
-      let r_new = v;
-      if (dif >= vw) {
-        r_new = r - v;
-        dif -= vw;
-        ret = 0;
-      }
-      h.SymbolValue = dif;
-      h.SymbolRange = r_new;
-      this.renormalized_symbol({ b, h });
-
+      let ret = this.aom_read_bit({ b, h });
       literal |= ret << bit;
     }
     return literal;
+  }
+
+  L2({ b, h }: { b: BitReader, h: any }, n: number) {
+    let x = 1;
+    let length = 0;
+    let i = 0;
+
+    while (!i) {
+      i = this.aom_read_bit({ b, h });
+
+      ++length;
+      if (length > 20) {
+        console.error("Invalid length in read_golomb");
+        break;
+      }
+    }
+
+    for (i = 0; i < length - 1; ++i) {
+      x <<= 1;
+      x += this.aom_read_bit({ b, h });
+    }
+    return x - 1;
   }
 
   NS({ b, h }: { b: BitReader, h: any }, n: number) {
@@ -7586,15 +7638,15 @@ export class OBU {
     mi_params.mi_alloc_bsize = BLOCK_4X4;
     mi_params.mi_alloc_stride = mi_params.mi_stride;
 
-    let uv_width = aligned_width >> h.subsampling_x;
-    let uv_height = aligned_height >> h.subsampling_y;
+    let uv_width = aligned_width >> this.seq_header.subsampling_x;
+    let uv_height = aligned_height >> this.seq_header.subsampling_y;
     let border = 64;
-    let uv_border_w = border >> h.subsampling_x;
-    let uv_border_h = border >> h.subsampling_y;
+    let uv_border_w = border >> this.seq_header.subsampling_x;
+    let uv_border_h = border >> this.seq_header.subsampling_y;
     let y_stride = aom_calc_y_stride(aligned_width, border);
-    let uv_stride = y_stride >> h.subsampling_x;
+    let uv_stride = y_stride >> this.seq_header.subsampling_x;
     let yplane_size = (aligned_height + 2 * border) * y_stride + h.byte_alignment;
-    let uvplane_size = (uv_height + 2 * (border >> h.subsampling_y)) * uv_stride + h.byte_alignment;
+    let uvplane_size = (uv_height + 2 * (border >> this.seq_header.subsampling_y)) * uv_stride + h.byte_alignment;
     this.cur_frame.buf = {
       buffer_alloc: new ArrayBuffer(32),
       y_crop_width: h['FrameWidth'],
@@ -7602,15 +7654,15 @@ export class OBU {
       y_width: aligned_width,
       y_height: aligned_height,
       y_stride,
-      uv_crop_width: (h['FrameWidth'] + h.subsampling_x) >> h.subsampling_x,
-      uv_crop_height: (h['FrameHeight'] + h.subsampling_y) >> h.subsampling_y,
-      uv_width: aligned_width >> h.subsampling_x,
-      uv_height: aligned_height >> h.subsampling_y,
-      uv_stride: y_stride >> h.subsampling_x,
+      uv_crop_width: (h['FrameWidth'] + this.seq_header.subsampling_x) >> this.seq_header.subsampling_x,
+      uv_crop_height: (h['FrameHeight'] + this.seq_header.subsampling_y) >> this.seq_header.subsampling_y,
+      uv_width: aligned_width >> this.seq_header.subsampling_x,
+      uv_height: aligned_height >> this.seq_header.subsampling_y,
+      uv_stride: y_stride >> this.seq_header.subsampling_x,
       border,
       frame_size: (1 + h.use_highbitdepth) * (yplane_size + 2 * uvplane_size),
-      subsampling_x: h.subsampling_x,
-      subsampling_y: h.subsampling_y,
+      subsampling_x: this.seq_header.subsampling_x,
+      subsampling_y: this.seq_header.subsampling_y,
       flags: (h.use_highbitdepth ? 8 : 0),
       y_buffer: border * y_stride + border,
       u_buffer: yplane_size + (uv_border_h * uv_stride) + uv_border_w,
@@ -8611,12 +8663,12 @@ export class OBU {
     if (bSize < BLOCK_8X8) {
       h.partition = PARTITION_NONE;
     } else if (hasRows && hasCols) {
-      h.partition = this.S({ b, h }, { name: "PartitionW", r, c, bsize: bSize });
+      h.partition = this.S({ b, h }, { name: "partition", r, c, bsize: bSize });
     } else if (hasCols) {
-      h.split_or_horz = this.S({ b, h }, { name: "PartitionW", r, c, bsize: bSize });
+      h.split_or_horz = this.S({ b, h }, { name: "split_or_horz", r, c, bsize: bSize });
       h.partition = h.split_or_horz ? PARTITION_SPLIT : PARTITION_HORZ;
     } else if (hasRows) {
-      h.split_or_vert = this.S({ b, h }, { name: "PartitionW", r, c, bsize: bSize });
+      h.split_or_vert = this.S({ b, h }, { name: "split_or_vert", r, c, bsize: bSize });
       h.partition = h.split_or_vert ? PARTITION_SPLIT : PARTITION_VERT;
     } else {
       h.partition = PARTITION_SPLIT;
@@ -8697,7 +8749,7 @@ export class OBU {
     else if (bw4 == 1 && this.seq_header.subsampling_x && (h['MiCol'] & 1) == 0)
       h['HasChroma'] = 0;
     else
-      h['HasChroma'] = h['NumPlanes'] > 1;
+      h['HasChroma'] = this.seq_header['NumPlanes'] > 1;
     h['AvailU'] = this.is_inside({ b, h }, r - 1, c);
     h['AvailL'] = this.is_inside({ b, h }, r, c - 1);
     h['AvailUChroma'] = h['AvailU'];
@@ -8784,7 +8836,7 @@ export class OBU {
     h[`RefFrame[0]`] = INTRA_FRAME;
     h[`RefFrame[1]`] = NONE;
     if (h.allow_intrabc) {
-      h.use_intrabc = this.S({ b, h }, { cdf: this.TileIntrabcCdf });
+      h.use_intrabc = this.S({ b, h }, { name: "use_intrabc" });
     } else {
       h.use_intrabc = 0;
     }
@@ -8802,11 +8854,11 @@ export class OBU {
       this.assign_mv({ b, h }, 0);
     } else {
       h.is_inter = 0;
-      h.intra_frame_y_mode = this.S({ b, h }, { name: "IntraFrameYMode" });
+      h.intra_frame_y_mode = this.S({ b, h }, { name: "intra_frame_y_mode" });
       h['YMode'] = h.intra_frame_y_mode;
       this.intra_angle_info_y({ b, h });
       if (h['HasChroma']) {
-        h.uv_mode = this.S({ b, h }, { name: "PaletteUVMode" });
+        h.uv_mode = this.S({ b, h }, { name: "uv_mode" });
         h['UVMode'] = h.uv_mode;
         if (h['UVMode'] == UV_CFL_PRED) {
           this.read_cfl_alphas({ b, h });
@@ -8878,7 +8930,7 @@ export class OBU {
     if (h.skip) {
       h.segment_id = h.pred;
     } else {
-      h.segment_id = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.segment_id = this.S({ b, h }, { name: "segment_id" });
       h.segment_id = neg_deinterleave(h.segment_id, h.pred,
         h['LastActiveSegId'] + 1);
     }
@@ -8894,7 +8946,7 @@ export class OBU {
       Block_Height[h['MiSize']] < 8) {
       h.skip_mode = 0;
     } else {
-      h.skip_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.skip_mode = this.S({ b, h }, { name: "skip_mode" });
     }
   }
 
@@ -8913,7 +8965,7 @@ export class OBU {
     if (h['MiSize'] == sbSize && h.skip)
       return;
     if (h['ReadDeltas']) {
-      h.delta_q_abs = this.S({ b, h }, { cdf: this.TileDeltaQCdf });
+      h.delta_q_abs = this.S({ b, h }, { name: "delta_q_abs" });
       if (h.delta_q_abs == DELTA_Q_SMALL) {
         h.delta_q_rem_bits = this.L({ b, h }, 3);
         h.delta_q_rem_bits++;
@@ -8940,7 +8992,7 @@ export class OBU {
         frameLfCount = (h['NumPlanes'] > 1) ? FRAME_LF_COUNT : (FRAME_LF_COUNT - 2);
       }
       for (let i = 0; i < frameLfCount; i++) {
-        h.delta_lf_abs = this.S_PartitionW({ b, h }, 0, 0, sbSize);
+        h.delta_lf_abs = this.S({ b, h }, { name: "delta_lf_abs" });
         let deltaLfAbs = h.delta_lf_abs;
         if (h.delta_lf_abs == DELTA_LF_SMALL) {
           h.delta_lf_rem_bits = this.L({ b, h }, 3);
@@ -8986,7 +9038,7 @@ export class OBU {
     let maxTxDepth = Max_Tx_Depth[h['MiSize']];
     h['TxSize'] = maxRectTxSize;
     if (h['MiSize'] > BLOCK_4X4 && allowSelect && h['TxMode'] == TX_MODE_SELECT) {
-      h.tx_depth = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.tx_depth = this.S({ b, h }, { name: "tx_depth" });
       for (let i = 0; i < h.tx_depth; i++)
         h['TxSize'] = Split_Tx_Size[h['TxSize']];
     }
@@ -9021,7 +9073,7 @@ export class OBU {
     if (txSz == TX_4X4 || depth == MAX_VARTX_DEPTH) {
       h.txfm_split = 0;
     } else {
-      h.txfm_split = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.txfm_split = this.S({ b, h }, { name: "txfm_split" });
     }
     let w4 = Tx_Width[txSz] / MI_SIZE;
     let h4 = Tx_Height[txSz] / MI_SIZE;
@@ -9093,7 +9145,7 @@ export class OBU {
           }
         }
         if (h.segmentation_temporal_update == 1) {
-          h.seg_id_predicted = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.seg_id_predicted = this.S({ b, h }, { name: "seg_id_predicted" });
           if (h.seg_id_predicted)
             h.segment_id = predictedSegmentId;
           else
@@ -9122,7 +9174,7 @@ export class OBU {
     } else if (this.seg_feature_active({ b, h }, SEG_LVL_GLOBALMV)) {
       h.is_inter = 1;
     } else {
-      h.is_inter = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.is_inter = this.S({ b, h }, { name: "is_inter" });
     }
   }
 
@@ -9143,11 +9195,11 @@ export class OBU {
   intra_block_mode_info({ b, h }: { b: BitReader, h: any }) {
     h[`RefFrame[0]`] = INTRA_FRAME;
     h[`RefFrame[1]`] = NONE;
-    h.y_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+    h.y_mode = this.S({ b, h }, { name: "y_mode" });
     h['YMode'] = h.y_mode;
     this.intra_angle_info_y({ b, h });
     if (h['HasChroma']) {
-      h.uv_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.uv_mode = this.S({ b, h }, { name: "uv_mode" });
       h['UVMode'] = h.uv_mode;
       if (h['UVMode'] == UV_CFL_PRED) {
         this.read_cfl_alphas({ b, h });
@@ -9193,18 +9245,18 @@ export class OBU {
       this.seg_feature_active({ b, h }, SEG_LVL_GLOBALMV)) {
       h['YMode'] = GLOBALMV;
     } else if (isCompound) {
-      h.compound_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.compound_mode = this.S({ b, h }, { name: "compound_mode" });
       h['YMode'] = NEAREST_NEARESTMV + h.compound_mode;
     } else {
-      h.new_mv = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.new_mv = this.S({ b, h }, { name: "new_mv" });
       if (h.new_mv == 0) {
         h['YMode'] = NEWMV;
       } else {
-        h.zero_mv = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.zero_mv = this.S({ b, h }, { name: "zero_mv" });
         if (h.zero_mv == 0) {
           h['YMode'] = GLOBALMV;
         } else {
-          h.ref_mv = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.ref_mv = this.S({ b, h }, { name: "ref_mv" });
           h['YMode'] = (h.ref_mv == 0) ? NEARESTMV : NEARMV;
         }
       }
@@ -9213,7 +9265,7 @@ export class OBU {
     if (h['YMode'] == NEWMV || h['YMode'] == NEW_NEWMV) {
       for (let idx = 0; idx < 2; idx++) {
         if (h['NumMvFound'] > idx + 1) {
-          h.drl_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.drl_mode = this.S({ b, h }, { name: "drl_mode" });
           if (h.drl_mode == 0) {
             h['RefMvIdx'] = idx;
             break;
@@ -9225,7 +9277,7 @@ export class OBU {
       h['RefMvIdx'] = 1;
       for (let idx = 1; idx < 3; idx++) {
         if (h['NumMvFound'] > idx + 1) {
-          h.drl_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.drl_mode = this.S({ b, h }, { name: "drl_mode" });
           if (h.drl_mode == 0) {
             h['RefMvIdx'] = idx;
             break;
@@ -9241,7 +9293,7 @@ export class OBU {
     if (h.interpolation_filter == SWITCHABLE) {
       for (let dir = 0; dir < (h.enable_dual_filter ? 2 : 1); dir++) {
         if (needs_interp_filter()) {
-          h.interp_filter[dir] = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.interp_filter[dir] = this.S({ b, h }, { name: "interp_filter", dir });
         } else {
           h.interp_filter[dir] = EIGHTTAP;
         }
@@ -9257,12 +9309,12 @@ export class OBU {
   // 5.11.24. Filter intra mode info syntax
   filter_intra_mode_info({ b, h }: { b: BitReader, h: any }) {
     h.use_filter_intra = 0;
-    if (h.enable_filter_intra &&
+    if (this.seq_header.enable_filter_intra &&
       h['YMode'] == DC_PRED && h['PaletteSizeY'] == 0 &&
       Math.max(Block_Width[h['MiSize']], Block_Height[h['MiSize']]) <= 32) {
-      h.use_filter_intra = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.use_filter_intra = this.S({ b, h }, { name: "use_filter_intra" });
       if (h.use_filter_intra) {
-        h.filter_intra_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.filter_intra_mode = this.S({ b, h }, { name: "filter_intra_mode" });
       }
     }
   }
@@ -9283,20 +9335,20 @@ export class OBU {
       let bw4 = Num_4x4_Blocks_Wide[h['MiSize']];
       let bh4 = Num_4x4_Blocks_High[h['MiSize']];
       if (h.reference_select && (Math.min(bw4, bh4) >= 2))
-        h.comp_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.comp_mode = this.S({ b, h }, { name: "comp_mode" });
       else
         h.comp_mode = SINGLE_REFERENCE;
       if (h.comp_mode == COMPOUND_REFERENCE) {
-        h.comp_ref_type = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.comp_ref_type = this.S({ b, h }, { name: "comp_ref_type" });
         if (h.comp_ref_type == UNIDIR_COMP_REFERENCE) {
-          h.uni_comp_ref = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.uni_comp_ref = this.S({ b, h }, { name: "uni_comp_ref" });
           if (h.uni_comp_ref) {
             h[`RefFrame[0]`] = BWDREF_FRAME;
             h[`RefFrame[1]`] = ALTREF_FRAME;
           } else {
-            h.uni_comp_ref_p1 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.uni_comp_ref_p1 = this.S({ b, h }, { name: "uni_comp_ref_p1" });
             if (h.uni_comp_ref_p1) {
-              h.uni_comp_ref_p2 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+              h.uni_comp_ref_p2 = this.S({ b, h }, { name: "uni_comp_ref_p2" });
               if (h.uni_comp_ref_p2) {
                 h[`RefFrame[0]`] = LAST_FRAME;
                 h[`RefFrame[1]`] = GOLDEN_FRAME;
@@ -9310,19 +9362,19 @@ export class OBU {
             }
           }
         } else {
-          h.comp_ref = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.comp_ref = this.S({ b, h }, { name: "comp_ref" });
           if (h.comp_ref == 0) {
-            h.comp_ref_p1 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.comp_ref_p1 = this.S({ b, h }, { name: "comp_ref_p1" });
             h[`RefFrame[0]`] = h.comp_ref_p1 ?
               LAST2_FRAME : LAST_FRAME;
           } else {
-            h.comp_ref_p2 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.comp_ref_p2 = this.S({ b, h }, { name: "comp_ref_p2" });
             h[`RefFrame[0]`] = h.comp_ref_p2 ?
               GOLDEN_FRAME : LAST3_FRAME;
           }
-          h.comp_bwdref = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.comp_bwdref = this.S({ b, h }, { name: "comp_bwdref" });
           if (h.comp_bwdref == 0) {
-            h.comp_bwdref_p1 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.comp_bwdref_p1 = this.S({ b, h }, { name: "comp_bwdref_p1" });
             h[`RefFrame[1]`] = h.comp_bwdref_p1 ?
               ALTREF2_FRAME : BWDREF_FRAME;
           } else {
@@ -9330,24 +9382,24 @@ export class OBU {
           }
         }
       } else {
-        h.single_ref_p1 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.single_ref_p1 = this.S({ b, h }, { name: "single_ref_p1" });
         if (h.single_ref_p1) {
-          h.single_ref_p2 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.single_ref_p2 = this.S({ b, h }, { name: "single_ref_p2" });
           if (h.single_ref_p2 == 0) {
-            h.single_ref_p6 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.single_ref_p6 = this.S({ b, h }, { name: "single_ref_p6" });
             h[`RefFrame[0]`] = h.single_ref_p6 ?
               ALTREF2_FRAME : BWDREF_FRAME;
           } else {
             h[`RefFrame[0]`] = ALTREF_FRAME;
           }
         } else {
-          h.single_ref_p3 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.single_ref_p3 = this.S({ b, h }, { name: "single_ref_p3" });
           if (h.single_ref_p3) {
-            h.single_ref_p5 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.single_ref_p5 = this.S({ b, h }, { name: "single_ref_p5" });
             h[`RefFrame[0]`] = h.single_ref_p5 ?
               GOLDEN_FRAME : LAST3_FRAME;
           } else {
-            h.single_ref_p4 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.single_ref_p4 = this.S({ b, h }, { name: "single_ref_p4" });
             h[`RefFrame[0]`] = h.single_ref_p4 ?
               LAST2_FRAME : LAST_FRAME;
           }
@@ -9433,10 +9485,10 @@ export class OBU {
     this.find_warp_samples();
     if (h.force_integer_mv || h['NumSamples'] == 0 ||
       !h.allow_warped_motion || is_scaled(h[`RefFrame[0]`])) {
-      h.use_obmc = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.use_obmc = this.S({ b, h }, { name: "use_obmc" });
       h.motion_mode = h.use_obmc ? OBMC : SIMPLE;
     } else {
-      h.motion_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.motion_mode = this.S({ b, h }, { name: "motion_mode" });
     }
   }
 
@@ -9444,16 +9496,16 @@ export class OBU {
   read_interintra_mode({ b, h }: { b: BitReader, h: any }, isCompound: number) {
     if (!h.skip_mode && h.enable_interintra_compound && !isCompound &&
       h['MiSize'] >= BLOCK_8X8 && h['MiSize'] <= BLOCK_32X32) {
-      h.interintra = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.interintra = this.S({ b, h }, { name: "interintra" });
       if (h.interintra) {
-        h.interintra_mode = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.interintra_mode = this.S({ b, h }, { name: "interintra_mode" });
         h[`RefFrame[1]`] = INTRA_FRAME;
         h['AngleDeltaY'] = 0;
         h['AngleDeltaUV'] = 0;
         h.use_filter_intra = 0;
-        h.wedge_interintra = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.wedge_interintra = this.S({ b, h }, { name: "wedge_interintra" });
         if (h.wedge_interintra) {
-          h.wedge_index = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.wedge_index = this.S({ b, h }, { name: "wedge_index" });
           h.wedge_sign = 0;
         }
       }
@@ -9473,11 +9525,11 @@ export class OBU {
     if (isCompound) {
       let n = Wedge_Bits[h['MiSize']];
       if (h.enable_masked_compound) {
-        h.comp_group_idx = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.comp_group_idx = this.S({ b, h }, { name: "comp_group_idx" });
       }
       if (h.comp_group_idx == 0) {
         if (h.enable_jnt_comp) {
-          h.compound_idx = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.compound_idx = this.S({ b, h }, { name: "compound_idx" });
           h.compound_type = h.compound_idx ? COMPOUND_AVERAGE :
             COMPOUND_DISTANCE;
         } else {
@@ -9487,11 +9539,11 @@ export class OBU {
         if (n == 0) {
           h.compound_type = COMPOUND_DIFFWTD
         } else {
-          h.compound_type = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.compound_type = this.S({ b, h }, { name: "compound_type" });
         }
       }
       if (h.compound_type == COMPOUND_WEDGE) {
-        h.wedge_index = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.wedge_index = this.S({ b, h }, { name: "wedge_index" });
         h.wedge_sign = this.L({ b, h }, 1);
       } else if (h.compound_type == COMPOUND_DIFFWTD) {
         h.mask_type = this.L({ b, h }, 1);
@@ -9540,7 +9592,7 @@ export class OBU {
     } else {
       h['MvCtx'] = 0;
     }
-    h.mv_joint = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+    h.mv_joint = this.S({ b, h }, { name: "mv_joint" });
     if (h.mv_joint == MV_JOINT_HZVNZ || h.mv_joint == MV_JOINT_HNZVNZ)
       diffMv[0] = this.read_mv_component({ b, h }, 0);
     if (h.mv_joint == MV_JOINT_HNZVZ || h.mv_joint == MV_JOINT_HNZVNZ)
@@ -9551,17 +9603,17 @@ export class OBU {
 
   // 5.11.32. MV component syntax
   read_mv_component({ b, h }: { b: BitReader, h: any }, comp: number) {
-    h.mv_sign = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
-    h.mv_class = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+    h.mv_sign = this.S({ b, h }, { name: "mv_sign" });
+    h.mv_class = this.S({ b, h }, { name: "mv_class" });
     let mag = 0;
     if (h.mv_class == MV_CLASS_0) {
-      h.mv_class0_bit = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.mv_class0_bit = this.S({ b, h }, { name: "mv_class0_bit" });
       if (h.force_integer_mv)
         h.mv_class0_fr = 3;
       else
-        h.mv_class0_fr = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.mv_class0_fr = this.S({ b, h }, { name: "mv_class0_fr" });
       if (h.allow_high_precision_mv)
-        h.mv_class0_hp = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.mv_class0_hp = this.S({ b, h }, { name: "mv_class0_hp" });
       else
         h.mv_class0_hp = 1;
       mag = ((h.mv_class0_bit << 3) |
@@ -9570,16 +9622,16 @@ export class OBU {
     } else {
       let d = 0;
       for (let i = 0; i < h.mv_class; i++) {
-        h.mv_bit = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.mv_bit = this.S({ b, h }, { name: "mv_bit" });
         d |= h.mv_bit << i;
       }
       mag = CLASS0_SIZE << (h.mv_class + 2)
       if (h.force_integer_mv)
         h.mv_fr = 3;
       else
-        h.mv_fr = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.mv_fr = this.S({ b, h }, { name: "mv_fr" });
       if (h.allow_high_precision_mv)
-        h.mv_hp = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.mv_hp = this.S({ b, h }, { name: "mv_hp" });
       else
         h.mv_hp = 1;
       mag += ((d << 3) | (h.mv_fr << 1) | h.mv_hp) + 1;
@@ -9598,8 +9650,8 @@ export class OBU {
       let num4x4H = Num_4x4_Blocks_High[planeSz];
       let log2W = MI_SIZE_LOG2 + Mi_Width_Log2[planeSz]
       let log2H = MI_SIZE_LOG2 + Mi_Height_Log2[planeSz]
-      let subX = (plane > 0) ? h.subsampling_x : 0
-      let subY = (plane > 0) ? h.subsampling_y : 0
+      let subX = (plane > 0) ? this.seq_header.subsampling_x : 0
+      let subY = (plane > 0) ? this.seq_header.subsampling_y : 0
       let baseX = (h['MiCol'] >> subX) * MI_SIZE
       let baseY = (h['MiRow'] >> subY) * MI_SIZE
       let candRow = (h.MiRow >> subY) << subY
@@ -9668,8 +9720,8 @@ export class OBU {
           let planeSz = this.get_plane_residual_size({ b, h }, miSizeChunk, plane);
           let num4x4W = Num_4x4_Blocks_Wide[planeSz];
           let num4x4H = Num_4x4_Blocks_High[planeSz];
-          let subX = (plane > 0) ? h.subsampling_x : 0;
-          let subY = (plane > 0) ? h.subsampling_y : 0;
+          let subX = (plane > 0) ? this.seq_header.subsampling_x : 0;
+          let subY = (plane > 0) ? this.seq_header.subsampling_y : 0;
           let baseX = (miColChunk >> subX) * MI_SIZE;
           let baseY = (miRowChunk >> subY) * MI_SIZE;
           if (h.is_inter && !h.Lossless && !plane) {
@@ -9680,8 +9732,8 @@ export class OBU {
             for (let y = 0; y < num4x4H; y += stepY)
               for (let x = 0; x < num4x4W; x += stepX)
                 this.transform_block({ b, h }, plane, baseXBlock, baseYBlock, txSz,
-                  x + ((chunkX << 4) >> subX),
-                  y + ((chunkY << 4) >> subY));
+                  x + ((chunkX << 4) >>> subX),
+                  y + ((chunkY << 4) >>> subY));
           }
         }
       }
@@ -9692,8 +9744,8 @@ export class OBU {
   transform_block({ b, h }: { b: BitReader, h: any }, plane: number, baseX: number, baseY: number, txSz: number, x: number, y: number) {
     let startX = baseX + 4 * x;
     let startY = baseY + 4 * y;
-    let subX = (plane > 0) ? h.subsampling_x : 0;
-    let subY = (plane > 0) ? h.subsampling_y : 0;
+    let subX = (plane > 0) ? this.seq_header.subsampling_x : 0;
+    let subY = (plane > 0) ? this.seq_header.subsampling_y : 0;
     let row = (startY << subY) >> MI_SIZE_LOG2;
     let col = (startX << subX) >> MI_SIZE_LOG2;
     let sbMask = h.use_128x128_superblock ? 31 : 15;
@@ -9830,8 +9882,8 @@ export class OBU {
       [[BLOCK_16X64, BLOCK_16X32], [BLOCK_INVALID, BLOCK_8X32]],
       [[BLOCK_64X16, BLOCK_INVALID], [BLOCK_32X16, BLOCK_32X8]],
     ];
-    let subx = plane > 0 ? h.subsampling_x : 0;
-    let suby = plane > 0 ? h.subsampling_y : 0;
+    let subx = plane > 0 ? this.seq_header.subsampling_x : 0;
+    let suby = plane > 0 ? this.seq_header.subsampling_y : 0;
     return Subsampled_Size[subsize][subx][suby]
   }
 
@@ -9842,7 +9894,7 @@ export class OBU {
     let w4 = Tx_Width[txSz] >> 2;
     let h4 = Tx_Height[txSz] >> 2;
     let txSzCtx = (Tx_Size_Sqr[txSz] + Tx_Size_Sqr_Up[txSz] + 1) >> 1;
-    let ptype = plane > 0;
+    let ptype = Number(plane > 0);
     let segEob = (txSz == TX_16X64 || txSz == TX_64X16) ? 512 :
       Math.min(1024, Tx_Width[txSz] * Tx_Height[txSz]);
     for (let c = 0; c < segEob; c++)
@@ -9853,7 +9905,7 @@ export class OBU {
     let eob = 0;
     let culLevel = 0;
     let dcCategory = 0;
-    h.all_zero = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+    h.all_zero = this.S({ b, h }, { name: "all_zero", txSzCtx, plane, txSz, x4, y4, w4, h4 });
     if (h.all_zero) {
       let c = 0;
       if (plane == 0) {
@@ -9871,31 +9923,31 @@ export class OBU {
       let eobMultisize = Math.min(Tx_Width_Log2[txSz], 5) + Math.min(Tx_Height_Log2[txSz], 5) - 4;
       let eobPt = 0;
       if (eobMultisize == 0) {
-        h.eob_pt_16 = this.S({ b, h }, { name: "EobPt16" });
+        h.eob_pt_16 = this.S({ b, h }, { name: "eob_pt_16", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_16 + 1;
       } else if (eobMultisize == 1) {
-        h.eob_pt_32 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_pt_32 = this.S({ b, h }, { name: "eob_pt_32", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_32 + 1;
       } else if (eobMultisize == 2) {
-        h.eob_pt_64 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_pt_64 = this.S({ b, h }, { name: "eob_pt_64", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_64 + 1;
       } else if (eobMultisize == 3) {
-        h.eob_pt_128 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_pt_128 = this.S({ b, h }, { name: "eob_pt_128", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_128 + 1;
       } else if (eobMultisize == 4) {
-        h.eob_pt_256 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_pt_256 = this.S({ b, h }, { name: "eob_pt_256", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_256 + 1;
       } else if (eobMultisize == 5) {
-        h.eob_pt_512 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_pt_512 = this.S({ b, h }, { name: "eob_pt_512", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_512 + 1;
       } else {
-        h.eob_pt_1024 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_pt_1024 = this.S({ b, h }, { name: "eob_pt_1024", plane, txSz, x4, y4, ptype });
         eobPt = h.eob_pt_1024 + 1;
       }
       eob = (eobPt < 2) ? eobPt : ((1 << (eobPt - 2)) + 1);
       let eobShift = Math.max(-1, eobPt - 3);
       if (eobShift >= 0) {
-        h.eob_extra = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.eob_extra = this.S({ b, h }, { name: "eob_extra", txSzCtx, ptype, eobPt });
         if (h.eob_extra) {
           eob += (1 << eobShift);
         }
@@ -9911,17 +9963,17 @@ export class OBU {
         let pos = scan[c];
         let level = 0;
         if (c == (eob - 1)) {
-          h.coeff_base_eob = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.coeff_base_eob = this.S({ b, h }, { name: "coeff_base_eob", txSz, plane, x4, y4, c, scan, txSzCtx, ptype });
           level = h.coeff_base_eob + 1;
         } else {
-          h.coeff_base = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.coeff_base = this.S({ b, h }, { name: "coeff_base", txSz, plane, x4, y4, c, scan, txSzCtx, ptype });
           level = h.coeff_base;
         }
         if (level > NUM_BASE_LEVELS) {
           for (let idx = 0;
             idx < COEFF_BASE_RANGE / (BR_CDF_SIZE - 1);
             idx++) {
-            h.coeff_br = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.coeff_br = this.S({ b, h }, { name: "coeff_br", txSz, pos, plane, x4, y4, txSzCtx, ptype });
             level += h.coeff_br;
             if (h.coeff_br < (BR_CDF_SIZE - 1))
               break;
@@ -9934,7 +9986,7 @@ export class OBU {
         let sign = 0;
         if (h[`Quant[${pos}]`] != 0) {
           if (c == 0) {
-            h.dc_sign = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+            h.dc_sign = this.S({ b, h }, { name: "dc_sign", plane, w4, h4, x4, y4, ptype });
             sign = h.dc_sign;
           } else {
             h.sign_bit = this.L({ b, h }, 1);
@@ -9947,7 +9999,7 @@ export class OBU {
           do {
             length++
             h.golomb_length_bit = this.L({ b, h }, 1);
-          } while (!h.golomb_length_bit)
+          } while (!h.golomb_length_bit);
           let x = 1;
           for (let i = length - 2; i >= 0; i--) {
             h.golomb_data_bit = this.L({ b, h }, 1);
@@ -9986,8 +10038,8 @@ export class OBU {
       return h[`TxTypes[${blockY}][${blockX}]`];
     }
     if (h.is_inter) {
-      let x4 = Math.max(h.MiCol, blockX << h.subsampling_x);
-      let y4 = Math.max(h.MiRow, blockY << h.subsampling_y);
+      let x4 = Math.max(h.MiCol, blockX << this.seq_header.subsampling_x);
+      let y4 = Math.max(h.MiRow, blockY << this.seq_header.subsampling_y);
       let txType = h[`TxTypes[${y4}][${x4}]`];
       if (!this.is_tx_type_in_set({ b, h }, txSet, txType))
         return DCT_DCT;
@@ -10132,7 +10184,7 @@ export class OBU {
     h.AngleDeltaY = 0;
     if (h.MiSize >= BLOCK_8X8) {
       if (this.is_directional_mode(h.YMode)) {
-        h.angle_delta_y = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.angle_delta_y = this.S({ b, h }, { name: "angle_delta_y" });
         h.AngleDeltaY = h.angle_delta_y - MAX_ANGLE_DELTA;
       }
     }
@@ -10143,7 +10195,7 @@ export class OBU {
     h.AngleDeltaUV = 0;
     if (h.MiSize >= BLOCK_8X8) {
       if (this.is_directional_mode(h.UVMode)) {
-        h.angle_delta_uv = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.angle_delta_uv = this.S({ b, h }, { name: "angle_delta_uv" });
         h.AngleDeltaUV = h.angle_delta_uv - MAX_ANGLE_DELTA;
       }
     }
@@ -10172,11 +10224,19 @@ export class OBU {
      *  |        7        | CFL_SIGN_POS  | CFL_SIGN_POS  |
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      */
-    h.cfl_alpha_signs = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
-    let signU = (h.cfl_alpha_signs + 1) / 3;
+    h.cfl_alpha_signs = this.S({ b, h }, { name: "cfl_alpha_signs" });
+    /** +-+-+-+-+-+-+-+-+-+-+-+-+
+     *  | signU | Name of signU |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |   0   | CFL_SIGN_ZERO |
+     *  |   1   | CFL_SIGN_NEG  |
+     *  |   2   | CFL_SIGN_POS  |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+
+     */
+    let signU = Math.floor((h.cfl_alpha_signs + 1) / 3);
     let signV = (h.cfl_alpha_signs + 1) % 3;
-    if (signU != 0 && signU != 1) { // signU != CFL_SIGN_ZERO
-      h.cfl_alpha_u = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+    if (signU != CFL_SIGN_ZERO) { // signU != CFL_SIGN_ZERO
+      h.cfl_alpha_u = this.S({ b, h }, { name: "cfl_alpha_u", signU, signV });
       h.CflAlphaU = 1 + h.cfl_alpha_u;
       if (signU == CFL_SIGN_NEG)
         h.CflAlphaU = -h.CflAlphaU;
@@ -10184,7 +10244,7 @@ export class OBU {
       h.CflAlphaU = 0;
     }
     if (signV != CFL_SIGN_ZERO) {
-      h.cfl_alpha_v = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.cfl_alpha_v = this.S({ b, h }, { name: "cfl_alpha_v", signU, signV });
       h.CflAlphaV = 1 + h.cfl_alpha_v;
       if (signV == CFL_SIGN_NEG)
         h.CflAlphaV = -h.CflAlphaV;
@@ -10197,9 +10257,9 @@ export class OBU {
   palette_mode_info({ b, h }: { b: BitReader, h: any }) {
     let bsizeCtx = Mi_Width_Log2[h.MiSize] + Mi_Height_Log2[h.MiSize] - 2;
     if (h.YMode == DC_PRED) {
-      h.has_palette_y = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.has_palette_y = this.S({ b, h }, { name: "has_palette_y" });
       if (h.has_palette_y) {
-        h.palette_size_y_minus_2 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.palette_size_y_minus_2 = this.S({ b, h }, { name: "palette_size_y_minus_2" });
         h.PaletteSizeY = h.palette_size_y_minus_2 + 2;
         let cacheN = this.get_palette_cache({ b, h }, 0);
         let idx = 0;
@@ -10234,9 +10294,9 @@ export class OBU {
       }
     }
     if (h.HasChroma && h.UVMode == DC_PRED) {
-      h.has_palette_uv = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+      h.has_palette_uv = this.S({ b, h }, { name: "has_palette_uv" });
       if (h.has_palette_uv) {
-        h.palette_size_uv_minus_2 = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.palette_size_uv_minus_2 = this.S({ b, h }, { name: "palette_size_uv_minus_2" });
         h.PaletteSizeUV = h.palette_size_uv_minus_2 + 2;
         let cacheN = this.get_palette_cache({ b, h }, 1);
         let idx = 0
@@ -10365,7 +10425,7 @@ export class OBU {
     if (set > 0 &&
       (h.segmentation_enabled ? this.get_qindex({ h }, 1, h.segment_id) : h.base_q_idx) > 0) {
       if (h.is_inter) {
-        h.inter_tx_type = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.inter_tx_type = this.S({ b, h }, { name: "inter_tx_type" });
         if (set == TX_SET_INTER_1)
           h.TxType = Tx_Type_Inter_Inv_Set1[h.inter_tx_type]
         else if (set == TX_SET_INTER_2)
@@ -10373,7 +10433,7 @@ export class OBU {
         else
           h.TxType = Tx_Type_Inter_Inv_Set3[h.inter_tx_type]
       } else {
-        h.intra_tx_type = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+        h.intra_tx_type = this.S({ b, h }, { name: "intra_tx_type", set, txSz });
         if (set == TX_SET_INTRA_1)
           h.TxType = Tx_Type_Intra_Inv_Set1[h.intra_tx_type]
         else
@@ -10421,7 +10481,7 @@ export class OBU {
           j >= Math.max(0, i - onscreenHeight + 1); j--) {
           this.get_palette_color_context({ b, h },
             h['ColorMapY'], (i - j), j, h['PaletteSizeY']);
-          h.palette_color_idx_y = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.palette_color_idx_y = this.S({ b, h }, { name: "palette_color_idx_y" });
           h[`ColorMapY[${i - j}][${j}]`] = h[`ColorOrder[${h.palette_color_idx_y}]`];
         }
       }
@@ -10439,10 +10499,10 @@ export class OBU {
     if (h['PaletteSizeUV']) {
       h.color_index_map_uv = this.NS({ b, h }, h['PaletteSizeUV']);
       h[`ColorMapUV[0][0]`] = h.color_index_map_uv;
-      blockHeight = blockHeight >> h.subsampling_y;
-      blockWidth = blockWidth >> h.subsampling_x;
-      onscreenHeight = onscreenHeight >> h.subsampling_y;
-      onscreenWidth = onscreenWidth >> h.subsampling_x;
+      blockHeight = blockHeight >> this.seq_header.subsampling_y;
+      blockWidth = blockWidth >> this.seq_header.subsampling_x;
+      onscreenHeight = onscreenHeight >> this.seq_header.subsampling_y;
+      onscreenWidth = onscreenWidth >> this.seq_header.subsampling_x;
       if (blockWidth < 4) {
         blockWidth += 2;
         onscreenWidth += 2;
@@ -10456,7 +10516,7 @@ export class OBU {
           j >= Math.max(0, i - onscreenHeight + 1); j--) {
           this.get_palette_color_context({ b, h },
             h['ColorMapUV'], (i - j), j, h['PaletteSizeUV']);
-          h.palette_color_idx_uv = this.S_PartitionW({ b, h }, 0, 0, h.use_128x128_superblock ? BLOCK_128X128 : BLOCK_64X64);
+          h.palette_color_idx_uv = this.S({ b, h }, { name: "palette_color_idx_uv" });
           h[`ColorMapUV[${i - j}][${j}]`] = h[`ColorOrder[${h.palette_color_idx_uv}]`];
         }
       }
@@ -10590,7 +10650,7 @@ export class OBU {
   // 5.11.57. Read loop restoration syntax
   read_lr({ b, h }: { b: BitReader, h: any }, r: number, c: number, bSize: number) {
     let count_units_in_frame = function (unitSize: number, frameSize: number) {
-      return Math.max((frameSize + (unitSize >> 1)) / unitSize, 1);
+      return Math.max(Math.floor((frameSize + (unitSize >>> 1)) / unitSize), 1);
     }
     if (h.allow_intrabc) {
       return;
@@ -10605,22 +10665,19 @@ export class OBU {
 
         let unitRows = count_units_in_frame(unitSize, Round2(h.FrameHeight, subY));
         let unitCols = count_units_in_frame(unitSize, Round2(h.UpscaledWidth, subX));
-        let unitRowStart = (r * (MI_SIZE >> subY) +
-          unitSize - 1) / unitSize;
-        let unitRowEnd = Math.min(unitRows, ((r + high) * (MI_SIZE >> subY) +
-          unitSize - 1) / unitSize);
+        let unitRowStart = Math.floor((r * (MI_SIZE >>> subY) + unitSize - 1) / unitSize);
+        let unitRowEnd = Math.min(unitRows, Math.floor(((r + high) * (MI_SIZE >>> subY) + unitSize - 1) / unitSize));
         let numerator = 0;
         let denominator = 0;
         if (h.use_superres) {
-          numerator = (MI_SIZE >> subX) * h['SuperresDenom'];
+          numerator = (MI_SIZE >>> subX) * h['SuperresDenom'];
           denominator = unitSize * SUPERRES_NUM;
         } else {
-          numerator = MI_SIZE >> subX;
+          numerator = MI_SIZE >>> subX;
           denominator = unitSize;
         }
-        let unitColStart = (c * numerator + denominator - 1) / denominator
-        let unitColEnd = Math.min(unitCols, ((c + wide) * numerator +
-          denominator - 1) / denominator);
+        let unitColStart = Math.floor((c * numerator + denominator - 1) / denominator);
+        let unitColEnd = Math.min(unitCols, Math.floor(((c + wide) * numerator + denominator - 1) / denominator));
         for (let unitRow = unitRowStart; unitRow < unitRowEnd; unitRow++) {
           for (let unitCol = unitColStart; unitCol < unitColEnd; unitCol++) {
             this.read_lr_unit({ b, h }, plane, unitRow, unitCol)
@@ -10645,13 +10702,13 @@ export class OBU {
     ];
 
     if (h[`FrameRestorationType[${plane}]`] == RESTORE_WIENER) {
-      h.use_wiener = this.S({ b, h }, { cdf: this.TileUseWienerCdf });
+      h.use_wiener = this.S({ b, h }, { name: "use_wiener" });
       h.restoration_type = h.use_wiener ? RESTORE_WIENER : RESTORE_NONE;
     } else if (h[`FrameRestorationType[${plane}]`] == RESTORE_SGRPROJ) {
-      h.use_sgrproj = this.S({ b, h }, { cdf: this.TileUseSgrprojCdf });
+      h.use_sgrproj = this.S({ b, h }, { name: "use_sgrproj" });
       h.restoration_type = h.use_sgrproj ? RESTORE_SGRPROJ : RESTORE_NONE;
     } else {
-      h.restoration_type = this.S({ b, h }, { cdf: this.TileRestorationTypeCdf });
+      h.restoration_type = this.S({ b, h }, { name: "restoration_type" });
     }
     h[`LrType[${plane}][${unitRow}][${unitCol}]`] = h.restoration_type;
     if (h.restoration_type == RESTORE_WIENER) {
@@ -10755,15 +10812,23 @@ export class OBU {
 
   // 6.10.2 解码图块语义
   clear_left_context({ b, h }: { b: BitReader, h: any }) {
-    h[`LeftLevelContext[0][0]`] = 0;
-    h[`LeftDcContext[0][0]`] = 0;
-    h[`LeftSegPredContext[0][0]`] = 0;
+    for (let plane = 0; plane < 3; plane++) {
+      for (let i = 0; i < h.MiRows; i++) {
+        h[`LeftLevelContext[${plane}][${i}]`] = 0;
+        h[`LeftDcContext[${plane}][${i}]`] = 0;
+        h[`LeftSegPredContext[${i}]`] = 0;
+      }
+    }
   }
   clear_above_context({ b, h }: { b: BitReader, h: any }) {
     // 当这个函数被调用时，数组AboveLevelContext, AboveDcContext和AboveSegPredContext被设置为0
-    h[`AboveLevelContext[0][0]`] = 0;
-    h[`AboveDcContext[0][0]`] = 0;
-    h[`AboveSegPredContext[0]`] = 0;
+    for (let plane = 0; plane < 3; plane++) {
+      for (let i = 0; i < h.MiCols; i++) {
+        h[`AboveLevelContext[${plane}][${i}]`] = 0;
+        h[`AboveDcContext[${plane}][${i}]`] = 0;
+        h[`AboveSegPredContext[${i}]`] = 0;
+      }
+    }
   }
 
   // 7.3.1 一般的
@@ -10824,8 +10889,8 @@ export class OBU {
     let height = (MiRowEnd - MiRowStart) * MI_SIZE;
     let x0 = MiColStart * MI_SIZE;
     let y0 = MiRowStart * MI_SIZE;
-    let subX = h.subsampling_x;
-    let subY = h.subsampling_y;
+    let subX = this.seq_header.subsampling_x;
+    let subY = this.seq_header.subsampling_y;
     let xC0 = (MiColStart * MI_SIZE) >> subX;
     let yC0 = (MiRowStart * MI_SIZE) >> subY;
   }
@@ -10888,18 +10953,25 @@ export class OBU {
     // decode_cdf_q15
     const N = cdf.length - 1;
     let prev = 0;
-    let value = h.SymbolValue >> 16 >>> 0;
-    let cur = h.SymbolRange;
+    let c = h.SymbolValue >>> 16;
+    let v = h.SymbolRange;
     let symbol = -1;
     do {
       symbol++;
-      prev = cur;
-      cur = ((h.SymbolRange >> 8) * (cdf[symbol] >> EC_PROB_SHIFT)) >> (7 - EC_PROB_SHIFT);
-      cur += EC_MIN_PROB * (N - symbol - 1);
-    } while (value < cur);
+      prev = v;
+      {
+        let v1 = h.SymbolRange >>> 8;
+        let v2 = cdf[symbol] >>> EC_PROB_SHIFT;
+        let v3 = v1 * v2;
+        let v4 = 7 - EC_PROB_SHIFT;
+        v = v3 >>> v4;
+      }
+      // v = ((h.SymbolRange >>> 8) * (cdf[symbol] >>> EC_PROB_SHIFT)) >>> (7 - EC_PROB_SHIFT);
+      v += EC_MIN_PROB * (N - symbol - 1);
+    } while (c < v);
 
-    h.SymbolRange = prev - cur;
-    h.SymbolValue -= cur << 16;
+    h.SymbolRange = prev - v;
+    h.SymbolValue -= v << 16;
 
     this.renormalized_symbol({ h, b });
 
@@ -10930,7 +11002,7 @@ export class OBU {
     if (h.SymbolCount < 0) {
       let s = 32 - 9 - (h.SymbolCount + 15);
       for (; s >= 0; s -= 8) {
-        h.SymbolValue ^= b.u(8) << s;
+        h.SymbolValue = (h.SymbolValue ^ (b.u(8) << s)) >>> 0;
         h.SymbolCount += 8;
       }
     }
