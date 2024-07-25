@@ -15152,16 +15152,25 @@ export class OBU {
 
     // 使用示例：
     // 假设arrayBuffer是一个ArrayBuffer对象，包含了要保存的二进制数据
-    let arrayBuffer: any[] = [];
-    for (let i = 0; i < 3; i++) {
+    let arrayBuffer = new Uint8Array(h.FrameHeight * h.FrameWidth * 3 / 2);
+    let index = 0;
+    // y
+    for (let h2 = 0; h2 < h.FrameHeight; h2++) {
       for (let w = 0; w < h.FrameWidth; w++) {
-        for (let h2 = 0; h2 < h.FrameHeight; h2++) {
-          if (h.CurrFrame[i][w][h2] != undefined) {
-            arrayBuffer.push(h.CurrFrame[i][w][h2]);
-          }
-        }
+        arrayBuffer[index++] = h.CurrFrame[0][h2][w];
       }
     }
+    for (let h2 = 0; h2 < h.FrameHeight / 2; h2++) {
+      for (let w = 0; w < h.FrameWidth / 2; w++) {
+        arrayBuffer[index++] = h.CurrFrame[1][h2][w];
+      }
+    }
+    for (let h2 = 0; h2 < h.FrameHeight / 2; h2++) {
+      for (let w = 0; w < h.FrameWidth / 2; w++) {
+        arrayBuffer[index++] = h.CurrFrame[2][h2][w];
+      }
+    }
+
     saveBinaryFile(arrayBuffer, 'example.yuv');
 
     // libaom
